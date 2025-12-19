@@ -1,0 +1,175 @@
+/*
+ * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
+ * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
+ */
+package concurrent.Threads;
+
+import concurrent.SharedResources.Gate;
+import java.util.Random;
+
+/**
+ *
+ * @author NICK
+ */
+public class Plane implements Runnable{
+    
+    //auto increment
+    private static int nextPlaneId = 1;
+    private final int planeId;
+    
+    //maybe use for log
+    private long arrivalTime;
+    private long landingTime;
+    
+    private int passengerCount;
+    private final Random random;
+    private final boolean fuelShortage;
+    private Gate assignedGate;
+    private Thread[] disembarkingPassengers;
+    private Thread[] embarkingPassengers;
+    
+    public Plane(boolean isEmergency){
+        this.planeId = nextPlaneId++;
+        this.fuelShortage = isEmergency;
+        this.random = new Random();
+        this.passengerCount = random.nextInt(50) + 1;
+        
+    }
+    public void run(){
+        try{
+            arrivalTime = System.currentTimeMillis();
+            requestLanding();
+            land();
+            coastToGate();
+            dock();
+            performGateOperation();
+            undock();
+            coastToRunway();
+            takeOff();
+            
+        } catch(InterruptedException e){
+            
+        }
+    }
+    private void requestLanding() throws InterruptedException{
+        System.out.println(Thread.currentThread().getName() + ":Requesting Landing.");
+        //call ATC to request landing permission and the gate number.
+        landingTime = System.currentTimeMillis();
+        //wait for ATC?
+    }
+    
+    private void land() throws InterruptedException{
+        System.out.println(Thread.currentThread().getName() + ":Landing.");
+        //runway.occupy(this); 
+        Thread.sleep(1000);
+        System.out.println(Thread.currentThread().getName() + ":Landed.");
+    }
+    
+    private void coastToGate() throws InterruptedException{
+        System.out.println(Thread.currentThread().getName() + "Coasting to " + "gate");
+        //runway.release();
+        Thread.sleep(500);
+    }
+    
+    private void dock() throws InterruptedException{
+        //gate.dock(this);
+        System.out.println(Thread.currentThread().getName() + ":Docked at " + "gate");
+    }
+    
+    //gate operation
+    private void performGateOperation()throws InterruptedException{
+        disembark();
+        Thread cleaningThread = cleaning();
+        refuelPlane();
+        
+        disembarkWait();
+        cleaningWait(cleaningThread);
+        
+        boardPassengers();
+        boardingWait();
+    }
+    
+    private void disembark(){
+        System.out.println(Thread.currentThread().getName() + "'s Passengers: Disembarking out of " + Thread.currentThread().getName());
+        
+        disembarkingPassengers = new Thread[passengerCount];
+        for(int i = 0; i < passengerCount; i++){
+            Passenger passenger = new Passenger(this);
+            disembarkingPassengers[i] = new Thread(passenger);
+            disembarkingPassengers[i].start();
+        }
+        
+    }
+    private void disembarkWait() throws InterruptedException{
+        for(Thread passenger : disembarkingPassengers){
+            passenger.join();
+        }
+    }
+    
+    private void refuelPlane() throws InterruptedException{
+        System.out.println(Thread.currentThread().getName() + ":Request refueling.");
+        //main.refuelingTruck.refuel(this);
+        System.out.println(Thread.currentThread().getName() + "Refueling completed.");
+    }
+    
+    private Thread cleaning(){
+        //lambda
+        Thread cleaningThread = new Thread(()-> {
+        try{
+            System.out.println(Thread.currentThread().getName() + "Cleaning and refilling supplies.");
+            Thread.sleep(2000);
+            System.out.println(Thread.currentThread().getName() + ":Cleaning completed.");
+        } catch(InterruptedException e){
+            Thread.currentThread().interrupt();
+        }
+        },Thread.currentThread().getName()+ "-Cleaning");
+        
+        cleaningThread.start();
+        return cleaningThread;
+    }
+    private void cleaningWait(Thread cleaning) throws InterruptedException{
+        cleaning.join();
+    }
+    
+    private void boardPassengers() {
+    System.out.println(Thread.currentThread().getName()+"'s Passengers: Boarding " + Thread.currentThread().getName() + ".");
+
+    embarkingPassengers = new Thread[passengerCount];
+    for (int i = 0; i < passengerCount; i++) {
+        Passenger passenger = new Passenger(this);
+        embarkingPassengers[i] = new Thread(passenger);
+        embarkingPassengers[i].start();
+    }
+}
+    private void boardingWait() throws InterruptedException{
+        for(Thread passenger : embarkingPassengers){
+            passenger.join();
+        }
+    }
+    
+    private void undock() throws InterruptedException{
+        System.out.println(Thread.currentThread().getName() + ":Undock from" + "gate");
+        //gate.undock();
+    }
+    
+    private void coastToRunway() throws InterruptedException{
+        System.out.println(Thread.currentThread().getName() + ":Coasting to Runway.");
+        Thread.sleep(500);
+    }
+    
+    private void takeOff() throws InterruptedException{
+        System.out.println(Thread.currentThread().getName() + ":Requesting Taking off.");
+        //call atc to take off and print take off msg.
+        //runway.occupy(this).
+        System.out.println(Thread.currentThread().getName() + ":Taking-off.");
+        Thread.sleep(1000);
+        //runway.release();
+        //airport.planeLeft();
+        System.out.println("");
+    }
+
+    public int getPlaneId() {
+        return planeId;
+    }
+    
+}
