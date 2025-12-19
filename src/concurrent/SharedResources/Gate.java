@@ -17,6 +17,7 @@ public class Gate {
     
     private boolean isOccupied;
     private Plane currentPlane;
+    private boolean isReserved = false;
     
     private final Object gateLock = new Object();
     
@@ -29,6 +30,7 @@ public class Gate {
     public void reserve(Plane plane){
         synchronized(gateLock){
             this.currentPlane = plane;
+            this.isReserved = true;
         }
     }
     
@@ -38,6 +40,7 @@ public class Gate {
                 gateLock.wait();
             }
             isOccupied = true;
+            isReserved = false;
             currentPlane = plane;
         }
     }
@@ -52,7 +55,7 @@ public class Gate {
     
     public boolean isAvailable(){
         synchronized(gateLock){
-            return !isOccupied;
+            return !isOccupied && !isReserved;
         }
     }
     

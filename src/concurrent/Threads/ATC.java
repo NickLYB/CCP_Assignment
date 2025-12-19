@@ -14,12 +14,15 @@ import java.util.Queue;
  * @author NICK
  */
 public class ATC implements Runnable {
-    private final Queue<Plane> waitingQueue;
+    private final Queue<Plane> landingQueue;
+    private final Queue<Plane> takeoffQueue;
+    
     private final Object atcLock = new Object();
     private volatile boolean running;
     
     public ATC(){
-        this.waitingQueue = new LinkedList<>();
+        this.landingQueue = new LinkedList<>();
+        this.takeoffQueue = new LinkedList<>();
         this.running = true;
     }
     
@@ -27,14 +30,67 @@ public class ATC implements Runnable {
         while(running){
             synchronized(atcLock){
                 try{
-                    if (!waitingQueue.isEmpty() && Main.airport.hasSpace()) {
-                        Plane plane = waitingQueue.peek();
+                    while(landingQueue.isEmpty() && takeoffQueue.isEmpty()){
+                        if (!running) return;
+                        atcLock.wait();
                     }
-                    atcLock.wait(100);
+                    
+                    boolean actionTaken = false;
+
+                    if(!landingQueue.isEmpty()){
+                        Plane selectedPlane = null;
+                        
+                        // Search for emergency first
+                        for(Plane p : landingQueue){
+                            if(p.hasFuelShortage()){
+                                selectedPlane = p;
+                                break; 
+                            }
+                        }
+                        
+                        if(selectedPlane == null){
+                            selectedPlane = landingQueue.peek();
+                        }
+                        
+                        if(Main.airport.hasSpace() && !allGatesOccupied()){
+                             landingQueue.remove(selectedPlane);
+                             
+                             Gate gate = assignAvailableGate();
+                             
+                             if(gate != null){
+                                 Main.airport.planeEntered();
+                                 gate.reserve(selectedPlane);
+                                 selectedPlane.setAssignedGate(gate);
+                                 
+                                 System.out.println(Thread.currentThread().getName() + ": Landing Permission GRANTED for Plane-" + selectedPlane.getPlaneId());
+                                 atcLock.notifyAll(); 
+                                 actionTaken = true;
+                             }
+                        } else {
+                            System.out.println(Thread.currentThread().getName() + ": Landing Permission Denied for Plane-" + selectedPlane.getPlaneId() + ", Airport Full");
+                        }
+                    }
+                    
+                    if(!actionTaken && !takeoffQueue.isEmpty()){
+                        Plane plane = takeoffQueue.peek();
+
+                        if(Main.runway.isAvailable()){
+                            takeoffQueue.poll();
+                            plane.setClearedForTakeoff(true);
+                            
+                            System.out.println(Thread.currentThread().getName() + ": Takeoff Permission GRANTED for Plane-" + plane.getPlaneId());
+                            atcLock.notifyAll(); 
+                            actionTaken = true;
+                        } else {
+                            System.out.println(Thread.currentThread().getName() + ": Takeoff Permission Denied for Plane-" + plane.getPlaneId() + ", Runway Occupied");
+                        }
+                    }
+
+                    if(!actionTaken){
+                        atcLock.wait();
+                    }
                 } catch (InterruptedException e) {
-                    if (!running) {
-                        break;
-                    }
+                    if (!running) break;
                 }
             }
         }
@@ -42,47 +98,25 @@ public class ATC implements Runnable {
     
     public Gate requestLandingPermission(Plane plane) throws InterruptedException{
         synchronized(atcLock){
-            if(plane.hasFuelShortage()){
-                System.out.println(Thread.currentThread().getName() + ": fuel shortage" + plane.getPlaneId());
-                
-            }
-            
-            while(!Main.airport.hasSpace()){
-                System.out.println(Thread.currentThread().getName() + ":Airport Full.");
-                
-                if(!waitingQueue.contains(plane)){
-                    waitingQueue.add(plane);
-                }
+            landingQueue.add(plane);
+            atcLock.notifyAll(); 
+
+            while(plane.getAssignedGate() == null){
                 atcLock.wait();
-                
-                if(plane.hasFuelShortage() && Main.airport.hasSpace()){
-                    waitingQueue.remove(plane);
-                    break;
-                }
-                
-                if(waitingQueue.peek() == plane && Main.airport.hasSpace()){
-                    waitingQueue.poll();
-                    break;
-                }
             }
-            waitingQueue.remove(plane);
-            Main.airport.planeEntered();
-            
-            Gate assignedGate = assignAvailableGate();
-            
-            if(assignedGate != null){
-                assignedGate.reserve(plane);
-            }
-            
-            atcLock.notifyAll();
-            
-            return assignedGate;
+            return plane.getAssignedGate();
         }
+        
     }
     
     public void requestTakeOffPermission(Plane plane) throws InterruptedException{
         synchronized(atcLock){
-            atcLock.notifyAll();
+            takeoffQueue.add(plane);
+            atcLock.notifyAll(); 
+
+            while(!plane.isClearedForTakeoff()){
+                atcLock.wait();
+            }
         }
     }
     
@@ -102,10 +136,16 @@ public class ATC implements Runnable {
         }
         return null;
     }
+    private boolean allGatesOccupied() {
+        for(Gate gate : Main.gates) {
+            if(gate.isAvailable()) return false;
+        }
+        return true;
+    }
     
     public int getWaitingQueueSize() {
         synchronized (atcLock) {
-            return waitingQueue.size();
+            return landingQueue.size();
         }
     }
     

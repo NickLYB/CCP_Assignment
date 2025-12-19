@@ -37,8 +37,9 @@ public class RefuelingTruck implements Runnable{
                     if(!running) break;
                     
                     if(!refuelQueue.isEmpty()){
-                        Plane plane = refuelQueue.poll();
+                        Plane plane = refuelQueue.peek();
                         performRefueling(plane);
+                        refuelQueue.poll();
                         truckLock.notifyAll();
                     }
                 } catch(InterruptedException e){
@@ -54,7 +55,7 @@ public class RefuelingTruck implements Runnable{
             System.out.println(Thread.currentThread().getName() + ":Added to refuelling queue. Position:" + refuelQueue.size());
             truckLock.notifyAll();
             
-            while(refuelQueue.contains(truckLock)){
+            while(refuelQueue.contains(plane)){
                 truckLock.wait();
             }
         }

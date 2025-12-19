@@ -25,10 +25,10 @@ public class Plane implements Runnable{
     private int passengerCount;
     private final Random random;
     private final boolean fuelShortage;
-    private final Object landingLock = new Object();
     private Gate assignedGate;
     private Thread[] disembarkingPassengers;
     private Thread[] embarkingPassengers;
+    private volatile boolean clearedForTakeoff = false;
     
     public Plane(boolean isEmergency){
         this.planeId = nextPlaneId++;
@@ -69,7 +69,7 @@ public class Plane implements Runnable{
     }
     
     private void coastToGate() throws InterruptedException{
-        System.out.println(Thread.currentThread().getName() + "Coasting to Gate-" + assignedGate.getGateId());
+        System.out.println(Thread.currentThread().getName() + ":Coasting to Gate-" + assignedGate.getGateId());
         Main.runway.release();
         Thread.sleep(500);
     }
@@ -82,6 +82,7 @@ public class Plane implements Runnable{
     //gate operation
     private void performGateOperation()throws InterruptedException{
         disembark();
+        disembarkWait();
         Thread cleaningThread = cleaning();
         refuelPlane();
         
@@ -119,7 +120,7 @@ public class Plane implements Runnable{
         //lambda
         Thread cleaningThread = new Thread(()-> {
         try{
-            System.out.println(Thread.currentThread().getName() + "Cleaning and refilling supplies.");
+            System.out.println(Thread.currentThread().getName() + ":Cleaning and refilling supplies.");
             Thread.sleep(2000);
             System.out.println(Thread.currentThread().getName() + ":Cleaning completed.");
         } catch(InterruptedException e){
@@ -190,9 +191,16 @@ public class Plane implements Runnable{
     public void setAssignedGate(Gate gate) {
         this.assignedGate = gate;
     }
+    public Gate getAssignedGate() {
+        return this.assignedGate;
+    }
+    
+    public boolean isClearedForTakeoff() {
+        return clearedForTakeoff;
+    }
 
-    Object getLandingLock() {
-        return landingLock;
-            }
+    public void setClearedForTakeoff(boolean cleared) {
+        this.clearedForTakeoff = cleared;
+    }
     
 }
