@@ -66,9 +66,7 @@ public class ATC implements Runnable {
                                  atcLock.notifyAll(); 
                                  actionTaken = true;
                              }
-                        } else {
-                            System.out.println(Thread.currentThread().getName() + ": Landing Permission Denied for Plane-" + selectedPlane.getPlaneId() + ", Airport Full");
-                        }
+                        } 
                     }
                     
                     if(!actionTaken && !takeoffQueue.isEmpty()){
@@ -81,13 +79,20 @@ public class ATC implements Runnable {
                             System.out.println(Thread.currentThread().getName() + ": Takeoff Permission GRANTED for Plane-" + plane.getPlaneId());
                             atcLock.notifyAll(); 
                             actionTaken = true;
-                        } else {
-                            System.out.println(Thread.currentThread().getName() + ": Takeoff Permission Denied for Plane-" + plane.getPlaneId() + ", Runway Occupied");
                         }
                     }
 
                     if(!actionTaken){
-                        atcLock.wait();
+                        if(!landingQueue.isEmpty() && (!Main.airport.hasSpace() || allGatesOccupied())){
+                             Plane p = landingQueue.peek(); 
+                             System.out.println(Thread.currentThread().getName() + ": Landing Permission Denied for Plane-" + p.getPlaneId() + ", Airport Full");
+                        }
+                        else if(!takeoffQueue.isEmpty() && !Main.runway.isAvailable()){
+                             Plane p = takeoffQueue.peek();
+                             System.out.println(Thread.currentThread().getName() + ": Takeoff Permission Denied for Plane-" + p.getPlaneId() + ", Runway Occupied");
+                        }
+                        
+                        atcLock.wait(1000);
                     }
                 } catch (InterruptedException e) {
                     if (!running) break;

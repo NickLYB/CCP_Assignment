@@ -29,7 +29,7 @@ public class Main {
     
     private static final int gatesCount = 3;
     private static final int numPlanes = 6;
-    private static final int emergencyPlaneId = 3;
+    private static final int emergencyPlaneId = 5;
     public static void main(String[] args) throws InterruptedException{
         // TODO code application logic here
         
