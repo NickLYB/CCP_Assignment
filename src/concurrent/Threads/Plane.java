@@ -4,6 +4,7 @@
  */
 package concurrent.Threads;
 
+import concurrent.Main;
 import concurrent.SharedResources.Gate;
 import java.util.Random;
 
@@ -24,6 +25,7 @@ public class Plane implements Runnable{
     private int passengerCount;
     private final Random random;
     private final boolean fuelShortage;
+    private final Object landingLock = new Object();
     private Gate assignedGate;
     private Thread[] disembarkingPassengers;
     private Thread[] embarkingPassengers;
@@ -47,33 +49,34 @@ public class Plane implements Runnable{
             coastToRunway();
             takeOff();
             
+            Main.statistics.recordPlane(this);
+            
         } catch(InterruptedException e){
             
         }
     }
     private void requestLanding() throws InterruptedException{
         System.out.println(Thread.currentThread().getName() + ":Requesting Landing.");
-        //call ATC to request landing permission and the gate number.
+        assignedGate = Main.atc.requestLandingPermission(this);
         landingTime = System.currentTimeMillis();
-        //wait for ATC?
     }
     
     private void land() throws InterruptedException{
         System.out.println(Thread.currentThread().getName() + ":Landing.");
-        //runway.occupy(this); 
+        Main.runway.occupy(this); 
         Thread.sleep(1000);
         System.out.println(Thread.currentThread().getName() + ":Landed.");
     }
     
     private void coastToGate() throws InterruptedException{
-        System.out.println(Thread.currentThread().getName() + "Coasting to " + "gate");
-        //runway.release();
+        System.out.println(Thread.currentThread().getName() + "Coasting to Gate-" + assignedGate.getGateId());
+        Main.runway.release();
         Thread.sleep(500);
     }
     
     private void dock() throws InterruptedException{
-        //gate.dock(this);
-        System.out.println(Thread.currentThread().getName() + ":Docked at " + "gate");
+        assignedGate.dock(this);
+        System.out.println(Thread.currentThread().getName() + ":Docked at Gate-" + assignedGate.getGateId());
     }
     
     //gate operation
@@ -108,7 +111,7 @@ public class Plane implements Runnable{
     
     private void refuelPlane() throws InterruptedException{
         System.out.println(Thread.currentThread().getName() + ":Request refueling.");
-        //main.refuelingTruck.refuel(this);
+        Main.refuelingTruck.refuel(this);
         System.out.println(Thread.currentThread().getName() + "Refueling completed.");
     }
     
@@ -148,8 +151,8 @@ public class Plane implements Runnable{
     }
     
     private void undock() throws InterruptedException{
-        System.out.println(Thread.currentThread().getName() + ":Undock from" + "gate");
-        //gate.undock();
+        System.out.println(Thread.currentThread().getName() + ":Undock from Gate-" + assignedGate.getGateId());
+        assignedGate.undock();
     }
     
     private void coastToRunway() throws InterruptedException{
@@ -159,17 +162,37 @@ public class Plane implements Runnable{
     
     private void takeOff() throws InterruptedException{
         System.out.println(Thread.currentThread().getName() + ":Requesting Taking off.");
-        //call atc to take off and print take off msg.
-        //runway.occupy(this).
+        Main.atc.requestTakeOffPermission(this);
+        Main.runway.occupy(this);
         System.out.println(Thread.currentThread().getName() + ":Taking-off.");
         Thread.sleep(1000);
-        //runway.release();
-        //airport.planeLeft();
+        Main.runway.release();
+        Main.airport.planeLeft();
         System.out.println("");
     }
 
     public int getPlaneId() {
         return planeId;
     }
+
+    public long getWaitingTime() {
+    return landingTime - arrivalTime;
+    }
+    
+    public int getPassengerCount() {
+        return passengerCount;
+    }
+
+    public boolean hasFuelShortage() {
+        return fuelShortage;
+    }
+
+    public void setAssignedGate(Gate gate) {
+        this.assignedGate = gate;
+    }
+
+    Object getLandingLock() {
+        return landingLock;
+            }
     
 }

@@ -62,4 +62,7 @@ public class Airport {
             }
         }
     }
+    public int getMaxCapacity() {
+        return maxCapacity;
+    }
 }

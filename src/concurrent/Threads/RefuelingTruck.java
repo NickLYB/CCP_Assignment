@@ -25,10 +25,8 @@ public class RefuelingTruck implements Runnable{
         this.running = true;
         this.planesRefueled = 0;
         
-        System.out.println("RefuellingTruck: Initialized successfully.");
     }
     public void run(){
-        System.out.println(Thread.currentThread().getName() + ":Refuelling truck service started.");
         
         while(running){
             synchronized(truckLock){
@@ -40,7 +38,7 @@ public class RefuelingTruck implements Runnable{
                     
                     if(!refuelQueue.isEmpty()){
                         Plane plane = refuelQueue.poll();
-                        //performRefueling(plane);
+                        performRefueling(plane);
                         truckLock.notifyAll();
                     }
                 } catch(InterruptedException e){
@@ -67,7 +65,12 @@ public class RefuelingTruck implements Runnable{
         planesRefueled++;
         System.out.println(Thread.currentThread().getName() + ":Plane-" + plane.getPlaneId() + " refueling completed.");
     }
-    //public void shutdown()
+    public void shutdown(){
+        synchronized (truckLock) {
+            running = false;
+            truckLock.notifyAll();
+        }
+    }
     
     
 }
