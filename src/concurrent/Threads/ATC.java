@@ -7,18 +7,19 @@ package concurrent.Threads;
 import concurrent.Main;
 import concurrent.SharedResources.*;
 import java.util.LinkedList;
-import java.util.Queue;
 
 /**
  *
  * @author NICK
  */
 public class ATC implements Runnable {
-    private final Queue<Plane> landingQueue;
-    private final Queue<Plane> takeoffQueue;
+    private final LinkedList<Plane> landingQueue;
+    private final LinkedList<Plane> takeoffQueue;
     
     private final Object atcLock = new Object();
     private volatile boolean running;
+    
+    private int lastDeniedId = -1;
     
     public ATC(){
         this.landingQueue = new LinkedList<>();
@@ -35,7 +36,7 @@ public class ATC implements Runnable {
                         atcLock.wait();
                     }
                     
-                    boolean actionTaken = false;
+                    boolean workDone = false;
 
                     if(!landingQueue.isEmpty()){
                         Plane selectedPlane = null;
@@ -52,47 +53,68 @@ public class ATC implements Runnable {
                             selectedPlane = landingQueue.peek();
                         }
                         
-                        if(Main.airport.hasSpace() && !allGatesOccupied()){
-                             landingQueue.remove(selectedPlane);
-                             
-                             Gate gate = assignAvailableGate();
-                             
-                             if(gate != null){
-                                 Main.airport.planeEntered();
-                                 gate.reserve(selectedPlane);
-                                 selectedPlane.setAssignedGate(gate);
-                                 
-                                 System.out.println(Thread.currentThread().getName() + ": Landing Permission GRANTED for Plane-" + selectedPlane.getPlaneId());
-                                 atcLock.notifyAll(); 
-                                 actionTaken = true;
-                             }
-                        } 
+                        if(Main.airport.hasSpace() && !allGatesOccupied()&& Main.runway.isAvailable()) {
+                            // ACT: Remove plane, assign gate
+                            landingQueue.remove(selectedPlane);
+                            Gate gate = assignAvailableGate();
+                            
+                            if(gate != null) {
+                                Main.airport.planeEntered();
+                                gate.reserve(selectedPlane);
+                                
+                                selectedPlane.setAssignedGate(gate);
+                                
+                                System.out.println(Thread.currentThread().getName() + ":Landing Permission GRANTED for Plane-" + selectedPlane.getPlaneId());
+                                
+                                atcLock.notifyAll(); 
+                                workDone = true;
+                                lastDeniedId = -1;
+                            }
+                        }
                     }
                     
-                    if(!actionTaken && !takeoffQueue.isEmpty()){
-                        Plane plane = takeoffQueue.peek();
-
-                        if(Main.runway.isAvailable()){
-                            takeoffQueue.poll();
-                            plane.setClearedForTakeoff(true);
+                    if(!workDone && !takeoffQueue.isEmpty()) {
+                        Plane candidate = takeoffQueue.getFirst();
+                        
+                        if(Main.runway.isAvailable()) {
+                            takeoffQueue.removeFirst();
                             
-                            System.out.println(Thread.currentThread().getName() + ": Takeoff Permission GRANTED for Plane-" + plane.getPlaneId());
-                            atcLock.notifyAll(); 
-                            actionTaken = true;
+                            // THE REPLY
+                            candidate.setClearedForTakeoff(true);
+                            
+                            System.out.println(Thread.currentThread().getName() + ":Takeoff Permission GRANTED for Plane-" + candidate.getPlaneId());
+                            
+                            atcLock.notifyAll();
+                            workDone = true;
                         }
                     }
+                    if(!workDone) {
+                        if(!landingQueue.isEmpty()){
+                            Plane newest = landingQueue.getLast();
 
-                    if(!actionTaken){
-                        if(!landingQueue.isEmpty() && (!Main.airport.hasSpace() || allGatesOccupied())){
-                             Plane p = landingQueue.peek(); 
-                             System.out.println(Thread.currentThread().getName() + ": Landing Permission Denied for Plane-" + p.getPlaneId() + ", Airport Full");
+                            // Check why we failed
+                            if (!Main.airport.hasSpace() || allGatesOccupied()) {
+                                 if(newest.getPlaneId() != lastDeniedId){
+                                     System.out.println(Thread.currentThread().getName() + ":Landing Permission Denied for Plane-" + newest.getPlaneId() + ". Airport Full.");
+                                     lastDeniedId = newest.getPlaneId();
+                                 }
+                            } 
+                            // FIX 3: Add explicit message for Landing Denied due to RUNWAY
+                            else if (!Main.runway.isAvailable()) {
+                                 if(newest.getPlaneId() != lastDeniedId){
+                                     System.out.println(Thread.currentThread().getName() + ":Landing Permission Denied for Plane-" + newest.getPlaneId() + ". Runway Occupied.");
+                                     lastDeniedId = newest.getPlaneId();
+                                 }
+                            }
                         }
-                        else if(!takeoffQueue.isEmpty() && !Main.runway.isAvailable()){
-                             Plane p = takeoffQueue.peek();
-                             System.out.println(Thread.currentThread().getName() + ": Takeoff Permission Denied for Plane-" + p.getPlaneId() + ", Runway Occupied");
+                        else if(!takeoffQueue.isEmpty() && !Main.runway.isAvailable()) {
+                             Plane newest = takeoffQueue.getLast();
+                             System.out.println(Thread.currentThread().getName() + ":Takeoff Permission Denied for Plane-" + newest.getPlaneId() + ". Runway Occupied.");
                         }
-                        
                         atcLock.wait(1000);
+                    }
+                    else {
+                        atcLock.wait(100); 
                     }
                 } catch (InterruptedException e) {
                     if (!running) break;

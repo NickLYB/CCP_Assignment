@@ -113,7 +113,7 @@ public class Plane implements Runnable{
     private void refuelPlane() throws InterruptedException{
         System.out.println(Thread.currentThread().getName() + ":Request refueling.");
         Main.refuelingTruck.refuel(this);
-        System.out.println(Thread.currentThread().getName() + "Refueling completed.");
+        System.out.println(Thread.currentThread().getName() + ":Refueling completed.");
     }
     
     private Thread cleaning(){

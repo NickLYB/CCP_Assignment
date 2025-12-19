@@ -38,12 +38,14 @@ public class Statistic {
         }
     }
     
+    
     public void printStatistic(){
         synchronized(statsLock){
             System.out.println("SIMULATION STATISTICS\n");
             
             if(waitingTimes.isEmpty()){
                 System.out.println("No data collected");
+                return; 
             }
             
             long maxWaitTime = Collections.max(waitingTimes);
@@ -53,7 +55,7 @@ public class Statistic {
             System.out.println("Waiting Time Statistic:\n");
             System.out.println("Max:" + maxWaitTime + "\n");
             System.out.println("Min:" + minWaitTime + "\n");
-            System.out.println("Avg:" + avgWaitTime + "\n");
+            System.out.println("Avg:" + String.format("%.1f", avgWaitTime) + "\n");
             
             System.out.println("Service Statistics:\n");
             System.out.println("Total planes served: " + totalPlanesServed + "\n");
@@ -63,7 +65,6 @@ public class Statistic {
                 double avgPassengers = (double) totalPassengersBoarded / totalPlanesServed;
                 System.out.println("Average passengers per plane: " + String.format("%.1f", avgPassengers));
             }
-            
         }
     }
     
