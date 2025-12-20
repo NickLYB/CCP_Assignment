@@ -15,25 +15,32 @@ public class Gate {
     private static int nextGateId = 1;
     private final int gateId;
     
-    private boolean isOccupied;
+    //plane that is assigned by ATC to this gate
     private Plane currentPlane;
-    private boolean isReserved = false;
     
+    //reserve - Assign gate to the plane, not yet dock
+    //occupy - Plane is docked to the gate
+    private boolean isReserved;
+    private boolean isOccupied;
+    
+    //mutex lock
     private final Object gateLock = new Object();
     
+    //constructor
     public Gate(){
         this.gateId = nextGateId++;
+        this.isReserved = false;
         this.isOccupied = false;
         this.currentPlane = null;
     }
     
+    //shared methods
     public void reserve(Plane plane){
         synchronized(gateLock){
             this.currentPlane = plane;
             this.isReserved = true;
         }
     }
-    
     public void dock(Plane plane) throws InterruptedException{
         synchronized(gateLock){
             while(isOccupied){
@@ -44,7 +51,6 @@ public class Gate {
             currentPlane = plane;
         }
     }
-    
     public void undock(){
         synchronized(gateLock){
             isOccupied = false;
@@ -53,27 +59,26 @@ public class Gate {
         }
     }
     
+    //flag
     public boolean isAvailable(){
         synchronized(gateLock){
             return !isOccupied && !isReserved;
         }
     }
-    
     public boolean isEmpty(){
         synchronized(gateLock){
             return !isOccupied && currentPlane == null;
         }
     }
     
+    //getter
     public int getGateId(){
         return gateId;
-    }
-    
+    }  
     public Plane getCurrentPlane(){
         synchronized(gateLock){
             return currentPlane;
         }
     }
-    
 }
  

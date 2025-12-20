@@ -41,7 +41,7 @@ public class Statistic {
     
     public void printStatistic(){
         synchronized(statsLock){
-            System.out.println("SIMULATION STATISTICS\n");
+            System.out.println("SIMULATION STATISTICS");
             
             if(waitingTimes.isEmpty()){
                 System.out.println("No data collected");
@@ -52,14 +52,14 @@ public class Statistic {
             long minWaitTime = Collections.min(waitingTimes);
             double avgWaitTime = waitingTimes.stream().mapToLong(Long::longValue).average().orElse(0);
             
-            System.out.println("Waiting Time Statistic:\n");
-            System.out.println("Max:" + maxWaitTime + "\n");
-            System.out.println("Min:" + minWaitTime + "\n");
-            System.out.println("Avg:" + String.format("%.1f", avgWaitTime) + "\n");
+            System.out.println("Waiting Time Statistic:");
+            System.out.println("Max:" + maxWaitTime);
+            System.out.println("Min:" + minWaitTime);
+            System.out.println("Avg:" + String.format("%.1f", avgWaitTime));
             
-            System.out.println("Service Statistics:\n");
-            System.out.println("Total planes served: " + totalPlanesServed + "\n");
-            System.out.println("Total passengers boarded: " + totalPassengersBoarded +"\n");
+            System.out.println("Service Statistics:");
+            System.out.println("Total planes served: " + totalPlanesServed);
+            System.out.println("Total passengers boarded: " + totalPassengersBoarded);
             
             if (totalPlanesServed > 0) {
                 double avgPassengers = (double) totalPassengersBoarded / totalPlanesServed;

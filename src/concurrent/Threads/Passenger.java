@@ -8,6 +8,7 @@ import java.util.Random;
 
 /**
  * @author NICK
+ * simulate how long may each individual passenger will act
  */
 public class Passenger implements Runnable{
     private final Plane plane;

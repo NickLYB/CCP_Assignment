@@ -12,14 +12,17 @@ import concurrent.Threads.Plane;
 public class Runway {
     private boolean isOccupied;
     private Plane currentPlane;
+    
+    //mutex lock
     private final Object runwayLock = new Object();
     
-    //initialize runway with no plane.
+    //constructor
     public Runway(){
         this.isOccupied = false;
         this.currentPlane = null;
     }
     
+    //shared methods
     public void occupy(Plane plane) throws InterruptedException{
         synchronized(runwayLock){
             while (isOccupied){
@@ -29,7 +32,6 @@ public class Runway {
             currentPlane = plane;
         }
     }
-    
     public void release(){
         synchronized(runwayLock){
             isOccupied = false;
@@ -38,12 +40,14 @@ public class Runway {
         }
     }
     
+    //flag
     public boolean isAvailable(){
         synchronized(runwayLock){
             return !isOccupied;
         }
     }
     
+    //getter
     public Plane getCurrentPlane(){
         synchronized(runwayLock){
             return currentPlane;
