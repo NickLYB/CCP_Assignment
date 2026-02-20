@@ -4,6 +4,9 @@
  */
 package concurrent.SharedResources;
 
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicInteger;
+
 /**
  *
  * @author NICK
@@ -11,54 +14,42 @@ package concurrent.SharedResources;
  * track the number of plane in airport only
  * Will trigger this class first before runway/gate
  */
+
 public class Airport {
-    
+
     private static final int maxCapacity = 3;
-    private int currentOccupancy;
-    
-    //mutex lock
-    private final Object airportLock = new Object();
-    
-    //constructor
-    public Airport(){
-        this.currentOccupancy = 0;
+
+    // Semaphore controls real capacity
+    private final Semaphore capacity = new Semaphore(maxCapacity, true);
+
+    // Optional: for monitoring only
+    private final AtomicInteger currentOccupancy = new AtomicInteger(0);
+
+    // ATC calls this when granting landing clearance
+    public void planeEntered() throws InterruptedException {
+        capacity.acquire();              // block if full
+        currentOccupancy.incrementAndGet();
     }
-    
-    //shared methods
-    public void planeEntered(){
-        synchronized(airportLock){
-            currentOccupancy++;
-        }
+
+    // Plane calls this when fully leaving airport
+    public void planeLeft() {
+        currentOccupancy.decrementAndGet();
+        capacity.release();
     }
-    public void planeLeft(){
-        synchronized(airportLock){
-            currentOccupancy--;
-            airportLock.notifyAll(); //notify ATC/Plane that space has opened up
-        }
+
+    public int getCurrentOccupancy() {
+        return currentOccupancy.get();
     }
-    
-    //getter
-    public int getCurrentOccupancy(){
-        return currentOccupancy;
-    }
+
     public int getMaxCapacity() {
         return maxCapacity;
     }
-    
-    //flag
-    public boolean hasSpace(){
-        synchronized(airportLock){
-            return currentOccupancy < maxCapacity;
-        }
+
+    public boolean hasSpace() {
+        return capacity.availablePermits() > 0;
     }
-    public boolean isFull(){
-        synchronized(airportLock){
-            return currentOccupancy >= maxCapacity;
-        }
-    }
-    public boolean isEmpty(){
-        synchronized(airportLock) {
-            return currentOccupancy == 0;
-        }
+
+    public boolean isFull() {
+        return capacity.availablePermits() == 0;
     }
 }

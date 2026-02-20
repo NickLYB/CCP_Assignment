@@ -19,6 +19,7 @@ public class Main {
     /**
      * @param args the command line arguments
      */
+    
     public static Runway runway;
     public static Airport airport;
     public static ATC atc;
@@ -26,79 +27,88 @@ public class Main {
     public static Gate[] gates;
     public static Statistic statistics;
     
+    // Arrays for the cleaning teams
+    public static Cleaning[] cleaners;
+    public static Thread[] cleanerThreads;
     
     private static final int gatesCount = 3;
     private static final int numPlanes = 6;
     private static final int emergencyPlaneId = 5;
-    public static void main(String[] args) throws InterruptedException{
-        // TODO code application logic here
+    
+    public static void main(String[] args) throws InterruptedException {
         
-        //initialize shared resources
+        // initialize shared resources
         runway = new Runway();
         airport = new Airport();
         gates = new Gate[gatesCount];
+        cleaners = new Cleaning[gatesCount];
+        cleanerThreads = new Thread[gatesCount];
+        
         for(int i = 0; i < gatesCount; i++){
             gates[i] = new Gate();
+            // Initialize a cleaning team for each gate
+            cleaners[i] = new Cleaning(gates[i]);
+            cleanerThreads[i] = new Thread(cleaners[i], "Cleaner-Gate" + (i+1));
         }
         
-        //initialize statistic
         statistics = new Statistic();
-        
-        //initialize thread
         refuelingTruck = new RefuelingTruck();
         atc = new ATC();
         
-        //start thread
-        //atc
+        // start threads
         Thread atcThread = new Thread(atc, "ATC");
         atcThread.start();
-        //refueling truck
+        
         Thread truckThread = new Thread(refuelingTruck, "RefuelingTruck");
         truckThread.start();
-        //planes 6
+        
+        // Start cleaning teams
+        for(int i = 0; i < gatesCount; i++) {
+            cleanerThreads[i].start();
+        }
+        
+        // planes 6
         Thread[] planeThreads = new Thread[numPlanes];
         Random rand = new Random();
         for (int i = 1; i <= numPlanes; i++) {
-            boolean isEmergency = (i == emergencyPlaneId); //flag to determine the plane have fuel shortage
-            //generate plane
+            boolean isEmergency = (i == emergencyPlaneId); 
             Plane plane = new Plane(isEmergency);
             Thread planeThread = new Thread(plane, "Plane-" + i);
             planeThreads[i - 1] = planeThread;
             planeThread.start();
-
-            Thread.sleep(rand.nextInt(2001)); //randomly delay the plane
+            Thread.sleep(rand.nextInt(2001)); 
         }
         
-        //wait for all plane to finish their thread
+        // wait for all plane to finish their thread
         for (int i = 0; i < planeThreads.length; i++) {
             planeThreads[i].join();
             System.out.println("[Main] Plane-" + (i + 1) + " thread has completed.");
         }
         
-        //safely shutdown all the service threads
+        // safely shutdown all the service threads
         atc.shutdown();
         refuelingTruck.shutdown();
+        for(int i = 0; i < gatesCount; i++) {
+            cleaners[i].shutdown();
+        }
         
         atcThread.join();
         truckThread.join();
-        
-        //sanity check
-        boolean allChecksPass = true;
-
-        for (Gate gate : gates) {
-            boolean isEmpty = gate.isEmpty();
-            if (!isEmpty) allChecksPass = false;
+        for(int i = 0; i < gatesCount; i++) {
+            cleanerThreads[i].join();
         }
-
-        int occupancy = airport.getCurrentOccupancy();
-        if (occupancy != 0) allChecksPass = false;
-
-        boolean runwayFree = runway.isAvailable();
-        if (!runwayFree) allChecksPass = false;
         
-        //print statistic
+        // sanity check
+        boolean allChecksPass = true;
+        for (Gate gate : gates) {
+            if (!gate.isEmpty()) allChecksPass = false;
+        }
+        if (airport.getCurrentOccupancy() != 0) allChecksPass = false;
+        if (!runway.isAvailable()) allChecksPass = false;
+        
+        System.out.println("Sanity Check Passed: " + allChecksPass);
+        
+        // print statistic
         statistics.printStatistic();
-        
     }
-    
 }

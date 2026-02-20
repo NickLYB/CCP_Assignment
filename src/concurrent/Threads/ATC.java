@@ -7,6 +7,7 @@ package concurrent.Threads;
 import concurrent.Main;
 import concurrent.SharedResources.*;
 import java.util.LinkedList;
+import java.util.concurrent.Semaphore;
 
 /**
  *
@@ -29,6 +30,8 @@ public class ATC implements Runnable {
     //remember who ATC already say denied to
     private int lastDeniedId = -1;
     
+    private final Semaphore gateSlots = new Semaphore(3, true);
+    
     //constructor
     public ATC(){
         this.landingQueue = new LinkedList<>();
@@ -36,171 +39,153 @@ public class ATC implements Runnable {
         this.running = true;
     }
     
-    public void run(){
-        //keep running until shutdown() method is triggered
-        while(running){
-            synchronized(atcLock){
-                try{
-                    //1. wait if nothing is happening
-                    while(landingQueue.isEmpty() && takeoffQueue.isEmpty()){
-                        if (!running) return;
-                        atcLock.wait(); //release lock and sleep until plane request something
+    public void run() {
+        while (running) {
+            try {
+                Plane landingPlane = null;
+                Plane takeoffPlane = null;
+                
+                synchronized (atcLock) {
+                    while (landingQueue.isEmpty() && takeoffQueue.isEmpty() && running) {
+                        atcLock.wait(); 
                     }
+                    if (!running) break;
                     
-                    boolean workDone = false;
-                    
-                    //2. check landing
-                    if(!landingQueue.isEmpty()){
-                        Plane selectedPlane = null;
-                        
-                        // Search for emergency/fuel shortage plane first
-                        for(Plane p : landingQueue){
-                            if(p.hasFuelShortage()){
-                                selectedPlane = p;
-                                break; 
+                    if (!landingQueue.isEmpty()) {
+                        for (Plane p : landingQueue) {
+                            if (p.hasFuelShortage()) {
+                                landingPlane = p;
+                                break;
                             }
                         }
-                        
-                        //if no emergency plane, ge the first in queue
-                        if(selectedPlane == null) selectedPlane = landingQueue.peek();
-                        
-                        //try lo land
-                        //check if airport doesnt hit max capacity,
-                        //have unoccupied gate,
-                        //and runway was clear.
-                        if(Main.airport.hasSpace() && !allGatesOccupied()&& Main.runway.isAvailable()) {
-                            // remove the plane from queue and assign gate
-                            landingQueue.remove(selectedPlane);
+                        if (landingPlane == null) {
+                            landingPlane = landingQueue.getFirst();
+                        }
+                    }
+                    
+                    if (!takeoffQueue.isEmpty()) {
+                        takeoffPlane = takeoffQueue.getFirst();
+                    }
+                } 
+                
+                boolean workDone = false;
+                
+                // 2. Process Landing (Check Capacity First!)
+                if (landingPlane != null) {
+                    if (!Main.airport.hasSpace() || gateSlots.availablePermits() == 0) {
+                        if (landingPlane.getPlaneId() != lastDeniedId) {
+                            System.out.println(Thread.currentThread().getName() + ": Landing Permission Denied for Plane-" + landingPlane.getPlaneId() + ". Airport/Gates Full.");
+                            lastDeniedId = landingPlane.getPlaneId();
+                        }
+                    } else if (!Main.runway.isAvailable()) {
+                        if (landingPlane.getPlaneId() != lastDeniedId) {
+                            System.out.println(Thread.currentThread().getName() + ": Landing Permission Denied for Plane-" + landingPlane.getPlaneId() + ". Runway Occupied.");
+                            lastDeniedId = landingPlane.getPlaneId();
+                        }
+                    } else {
+                        // Both are free! Try to grant.
+                        if (gateSlots.tryAcquire()) {
+                            synchronized(atcLock) {
+                                landingQueue.remove(landingPlane);
+                            }
+                            
+                            Main.airport.planeEntered(); 
                             Gate gate = assignAvailableGate();
                             
-                            //ensure gate is properlly assigned
-                            if(gate != null) {
-                                Main.airport.planeEntered(); //update airport capacity
-                                gate.reserve(selectedPlane); //update gate current reserved plane
-                                selectedPlane.setAssignedGate(gate); //tell the plane assigned gate
-                                
-                                //print log
-                                System.out.println(Thread.currentThread().getName() + ":Landing Permission Granted for Plane-" + selectedPlane.getPlaneId());
-                                
-                                atcLock.notifyAll(); // wake up plane thread
-                                workDone = true; // flag that landing permission gaved with properly assigned gate
-                                lastDeniedId = -1; //reset memory because successfully did something
+                            if (gate != null) {
+                                gate.reserve(landingPlane);
+                                synchronized(landingPlane) {
+                                    landingPlane.setAssignedGate(gate);
+                                    System.out.println(Thread.currentThread().getName() + ": Landing Permission Granted for Plane-" + landingPlane.getPlaneId());
+                                    landingPlane.notify(); 
+                                }
+                                workDone = true;
+                                lastDeniedId = -1;
+                            } else {
+                                gateSlots.release();
+                                Main.airport.planeLeft();
                             }
                         }
                     }
-                    
-                    //3. takeoff
-                    if(!workDone && !takeoffQueue.isEmpty()) {
-                        Plane selectedPlane = takeoffQueue.getFirst();
-                        
-                        //check runway
-                        if(Main.runway.isAvailable()) {
-                            takeoffQueue.removeFirst(); //remove plane from take off queue
-                            selectedPlane.setClearedForTakeoff(true); //grant plane to take off
-                            
-                            //print log
-                            System.out.println(Thread.currentThread().getName() + ":Takeoff Permission Granted for Plane-" + selectedPlane.getPlaneId());
-                            
-                            atcLock.notifyAll();//wake up plane thread
-                            workDone = true; //flag that takeoff permission granted and properly execute
-                        }
-                    }
-                    
-                    //4. report denial, airport full
-                    if(!workDone) {
-                        //A. landing denial
-                        if(!landingQueue.isEmpty()){
-                            Plane newest = landingQueue.getLast();
-                            //airport full
-                            if (!Main.airport.hasSpace() || allGatesOccupied()) {
-                                 if(newest.getPlaneId() != lastDeniedId){
-                                     System.out.println(Thread.currentThread().getName() + ":Landing Permission Denied for Plane-" + newest.getPlaneId() + ". Airport Full.");
-                                     lastDeniedId = newest.getPlaneId();
-                                 }
-                            }
-                            //runway occupied
-                            else if (!Main.runway.isAvailable()) {
-                                 if(newest.getPlaneId() != lastDeniedId){
-                                     System.out.println(Thread.currentThread().getName() + ":Landing Permission Denied for Plane-" + newest.getPlaneId() + ". Runway Occupied.");
-                                     lastDeniedId = newest.getPlaneId();
-                                 }
-                            }
-                        }
-                        //B. take off denial
-                        else if(!takeoffQueue.isEmpty() && !Main.runway.isAvailable()) {
-                             Plane newest = takeoffQueue.getLast();
-                             System.out.println(Thread.currentThread().getName() + ":Takeoff Permission Denied for Plane-" + newest.getPlaneId() + ". Runway Occupied.");
-                        }
-                        // sleep for 1 sec to avoid instant checking
-                        atcLock.wait(1000);
-                    }
-                    else {
-                        //small pauce to alow the granted plane to wake up and occupy resources
-                        atcLock.wait(100); 
-                    }
-                } catch (InterruptedException e) {
-                    if (!running) break;
                 }
+                
+                // 3. Process Takeoff
+                if (!workDone && takeoffPlane != null && Main.runway.isAvailable()) {
+                    synchronized(atcLock) {
+                        takeoffQueue.remove(takeoffPlane);
+                    }
+                    synchronized(takeoffPlane) {
+                        takeoffPlane.setClearedForTakeoff(true);
+                        System.out.println(Thread.currentThread().getName() + ": Takeoff Permission Granted for Plane-" + takeoffPlane.getPlaneId());
+                        takeoffPlane.notify();
+                    }
+                    workDone = true;
+                }
+                
+                // 4. Idle Control
+                if (!workDone) {
+                    Thread.sleep(200); 
+                } else {
+                    Thread.sleep(50); 
+                }
+                
+            } catch (InterruptedException e) {
+                if (!running) break;
             }
         }
     }
     
-    //helper
-    private Gate assignAvailableGate(){
-        for(Gate gate: Main.gates){
-            if(gate.isAvailable()){
+    private Gate assignAvailableGate() {
+        for (Gate gate : Main.gates) {
+            if (gate.isAvailable()) {
                 return gate;
             }
         }
         return null;
-    } //look for unoccupied gate
-    private boolean allGatesOccupied() {
-        for(Gate gate : Main.gates) {
-            if(gate.isAvailable()) return false;
-        }
-        return true;
-    } // state for gate
+    } 
     
-    //shared methods
-    public Gate requestLandingPermission(Plane plane) throws InterruptedException{
-        synchronized(atcLock){
-            landingQueue.add(plane); //add plane to queue
-            atcLock.notifyAll(); //
-
-            while(plane.getAssignedGate() == null){
-                atcLock.wait(); //
+    public Gate requestLandingPermission(Plane plane) throws InterruptedException {
+        synchronized (atcLock) {
+            landingQueue.add(plane);
+            atcLock.notifyAll(); 
+        } 
+        synchronized (plane) {
+            while (plane.getAssignedGate() == null) {
+                plane.wait(); 
             }
             return plane.getAssignedGate();
         }
-        
-    } //plane use to request for landing permission, and is permission granted, return the asigned gate
-    public void requestTakeOffPermission(Plane plane) throws InterruptedException{
-        synchronized(atcLock){
-            takeoffQueue.add(plane); //add plane to queue
-            atcLock.notifyAll(); //
-
-            while(!plane.isClearedForTakeoff()){
-                atcLock.wait(); //
+    }
+    
+    public void requestTakeOffPermission(Plane plane) throws InterruptedException {
+        synchronized (atcLock) {
+            takeoffQueue.add(plane);
+            atcLock.notifyAll(); 
+        } 
+        synchronized (plane) {
+            while (!plane.isClearedForTakeoff()) {
+                plane.wait();
             }
         }
-    } //plane use to request takeoff
-    public void shutdown(){
-        synchronized(atcLock){
-            running = false; //
-            atcLock.notifyAll(); //
+    }
+    
+    public void shutdown() {
+        running = false;
+        synchronized(atcLock) {
+            atcLock.notifyAll();
         }
         System.out.println("Thread-ATC: Shutdown");
-    } //terminate ATC thread
+    }
     
-    //getter
     public int getWaitingQueueSize() {
-        synchronized (atcLock) {
+        synchronized(atcLock) {
             return landingQueue.size();
         }
     }
     
-    //flag
-    public boolean isRunning() {
-        return running;
+    public boolean isRunning() { return running; }
+    
+    public void releaseGateSlot() {
+        gateSlots.release(); 
     }
 }

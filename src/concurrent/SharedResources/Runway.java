@@ -3,54 +3,42 @@
  * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
  */
 package concurrent.SharedResources;
+
 import concurrent.Threads.Plane;
+import java.util.concurrent.locks.ReentrantLock;
+
 
 /**
  *
  * @author NICK
  */
 public class Runway {
-    private boolean isOccupied;
+
+    private final ReentrantLock lock = new ReentrantLock(true);
     private Plane currentPlane;
-    
-    //mutex lock
-    private final Object runwayLock = new Object();
-    
-    //constructor
-    public Runway(){
-        this.isOccupied = false;
-        this.currentPlane = null;
-    }
-    
-    //shared methods
-    public void occupy(Plane plane) throws InterruptedException{
-        synchronized(runwayLock){
-            while (isOccupied){
-                runwayLock.wait();
-            }
-            isOccupied = true;
+
+    public void occupy(Plane plane) {
+        lock.lock();
+        try {
             currentPlane = plane;
+        } catch (Exception e) {
+            lock.unlock();
         }
     }
-    public void release(){
-        synchronized(runwayLock){
-            isOccupied = false;
+
+    public void release() {
+        try {
             currentPlane = null;
-            runwayLock.notifyAll();
+        } finally {
+            lock.unlock();
         }
     }
-    
-    //flag
-    public boolean isAvailable(){
-        synchronized(runwayLock){
-            return !isOccupied;
-        }
+
+    public boolean isAvailable() {
+        return !lock.isLocked();
     }
-    
-    //getter
-    public Plane getCurrentPlane(){
-        synchronized(runwayLock){
-            return currentPlane;
-        }
+
+    public Plane getCurrentPlane() {
+        return currentPlane;
     }
 }
