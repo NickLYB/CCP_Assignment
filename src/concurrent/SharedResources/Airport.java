@@ -22,7 +22,7 @@ public class Airport {
     // Semaphore controls real capacity
     private final Semaphore capacity = new Semaphore(maxCapacity, true);
 
-    // Optional: for monitoring only
+    
     private final AtomicInteger currentOccupancy = new AtomicInteger(0);
 
     // ATC calls this when granting landing clearance
