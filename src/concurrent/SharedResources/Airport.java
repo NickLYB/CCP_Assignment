@@ -17,12 +17,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class Airport {
 
+    //maximum number of planes allowed in airport ground
     private static final int maxCapacity = 3;
 
-    // Semaphore controls real capacity
+    //semaphore controls real capacity
     private final Semaphore capacity = new Semaphore(maxCapacity, true);
 
-    
+    //thread safe counter to track the current plane count in airport
     private final AtomicInteger currentOccupancy = new AtomicInteger(0);
 
     // ATC calls this when granting landing clearance
@@ -30,25 +31,24 @@ public class Airport {
         capacity.acquire();              // block if full
         currentOccupancy.incrementAndGet();
     }
-
     // Plane calls this when fully leaving airport
     public void planeLeft() {
-        currentOccupancy.decrementAndGet();
+        currentOccupancy.decrementAndGet(); //release the permit to wake up waiting threads
         capacity.release();
     }
 
+    //getter
     public int getCurrentOccupancy() {
         return currentOccupancy.get();
     }
-
     public int getMaxCapacity() {
         return maxCapacity;
     }
 
+    //condition checker
     public boolean hasSpace() {
         return capacity.availablePermits() > 0;
     }
-
     public boolean isFull() {
         return capacity.availablePermits() == 0;
     }

@@ -3,7 +3,6 @@
  * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
  */
 package concurrent.Threads;
-import concurrent.Main;
 import concurrent.SharedResources.Gate;
 /**
  *
@@ -23,7 +22,7 @@ public class Cleaning implements Runnable {
     public void run() {
         while (running) {
             try {
-                // Thread safely blocks here until the Plane calls requestCleaning()
+                //thread safely blocks here until the Plane calls requestCleaning()
                 assignedGate.awaitCleaning();
                 
                 if (!running) break; 
@@ -34,7 +33,7 @@ public class Cleaning implements Runnable {
                 Thread.sleep(2000); // Simulate cleaning time
                 System.out.println("CleaningTeam-" + assignedGate.getGateId() + ": Finished cleaning Plane-" + targetPlane.getPlaneId());
                 
-                // Tell the plane it is clean and ready for boarding
+                //tell the plane it is clean and ready for boarding
                 assignedGate.markCleaned();
                 
             } catch (InterruptedException e) {

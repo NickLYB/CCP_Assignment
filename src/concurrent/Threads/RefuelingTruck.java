@@ -1,98 +1,73 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
- */
 package concurrent.Threads;
 
-import java.util.LinkedList;
-import java.util.Queue;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
- *
  * @author NICK
  */
-public class RefuelingTruck implements Runnable{
+public class RefuelingTruck implements Runnable {
     private static final int refuelTime = 2000;
-    private final Queue<Plane> refuelQueue;
-    private final Object truckLock = new Object();
-    private volatile boolean running;
     
-    //statistic
-    private int planesRefueled;
-        
-    public RefuelingTruck(){
-        this.refuelQueue = new LinkedList<>();
-        this.running = true;
-        this.planesRefueled = 0;
-        
+    private final ReentrantLock truckLock = new ReentrantLock(true);
+    
+    // Hand-off variables
+    private volatile Plane currentPlane = null;
+    private volatile boolean isRefueling = false;
+    private volatile boolean running = true;
+    
+    private int planesRefueled = 0;
+
+    public RefuelingTruck(){}
+
+    // Called by Plane Threads
+    public void refuel(Plane plane) throws InterruptedException {
+        truckLock.lockInterruptibly(); 
+        try {
+            // 1. Hand off the task
+            this.currentPlane = plane;
+            this.isRefueling = true;
+
+            // 2. Wait for the Truck Thread to finish the work
+            while (this.isRefueling) {
+                Thread.sleep(50); 
+            }
+        } finally {
+            truckLock.unlock(); 
+        }
     }
-public void run() {
+
+    public void run() {
+        System.out.println("RefuelingTruck: Online and waiting.");
+        
         while (running) {
-            Plane planeToRefuel = null;
-            
-            // 1. Lock only to safely check the queue and peek at the next plane
-            synchronized (truckLock) {
+            if (isRefueling && currentPlane != null) {
+                System.out.println("RefuelingTruck: Processing Plane-" + currentPlane.getPlaneId());
+                
                 try {
-                    while (refuelQueue.isEmpty() && running) {
-                        truckLock.wait();
-                    }
-                    if (!running) break;
-                    
-                    if (!refuelQueue.isEmpty()) {
-                        planeToRefuel = refuelQueue.peek(); // Just peek, keep it in queue so contains() works
-                    }
+                    // Actual task duration
+                    Thread.sleep(refuelTime); 
                 } catch (InterruptedException e) {
-                    System.out.println("RefuelingTruck was interrupted.");
-                    Thread.currentThread().interrupt(); // Restore interrupted status
-                    break;
-                }
-            } // TRUCK LOCK IS RELEASED HERE!
-            
-            // 2. Perform the 2-second refueling OUTSIDE the lock
-            // Now other planes can freely join the queue while this is happening!
-            if (planeToRefuel != null) {
-                try {
-                    performRefueling(planeToRefuel);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    break;
+                    System.out.println("RefuelingTruck: Interrupted.");
                 }
                 
-                // 3. Re-lock briefly to remove the plane and notify waiting planes
-                synchronized (truckLock) {
-                    refuelQueue.poll(); 
-                    truckLock.notifyAll(); // Wake up the specific plane waiting in refuel()
+                planesRefueled++;
+                System.out.println("RefuelingTruck: Finished Plane-" + currentPlane.getPlaneId());
+                
+                // Reset for next plane
+                currentPlane = null;
+                isRefueling = false; 
+            } else {
+                try {
+                    Thread.sleep(50); // Prevent CPU burning while idle
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
                 }
             }
         }
-    }
-    
-    public void refuel(Plane plane) throws InterruptedException {
-        synchronized (truckLock) {
-            refuelQueue.add(plane);
-            System.out.println(Thread.currentThread().getName() + ": Added to refueling queue. Position: " + refuelQueue.size());
-            truckLock.notifyAll(); // Wake up the truck if it's sleeping
-            
-            // Wait until the truck removes this plane from the queue
-            while (refuelQueue.contains(plane)) {
-                truckLock.wait();
-            }
-        }
-    }
-    
-    private void performRefueling(Plane plane) throws InterruptedException {
-        System.out.println(Thread.currentThread().getName() + ": Refueling Plane-" + plane.getPlaneId());
-        Thread.sleep(refuelTime);
-        planesRefueled++;
-        System.out.println(Thread.currentThread().getName() + ": Plane-" + plane.getPlaneId() + " refueling completed.");
     }
     
     public void shutdown() {
-        synchronized (truckLock) {
-            running = false;
-            truckLock.notifyAll();
-        }
-        System.out.println("Thread-RefuelingTruck: Shutdown");
+        running = false;
+        System.out.println("RefuelingTruck: Shutdown. Total planes: " + planesRefueled);
     }
-    
 }

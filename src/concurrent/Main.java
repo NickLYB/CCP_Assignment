@@ -1,7 +1,3 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Main.java to edit this template
- */
 package concurrent;
 
 import concurrent.SharedResources.*;
@@ -12,13 +8,7 @@ import java.util.Random;
  *
  * @author NICK
  */
-
-
-
 public class Main {
-    /**
-     * @param args the command line arguments
-     */
     
     public static Runway runway;
     public static Airport airport;
@@ -94,6 +84,7 @@ public class Main {
         
         atcThread.join();
         truckThread.join();
+        
         for(int i = 0; i < gatesCount; i++) {
             cleanerThreads[i].join();
         }

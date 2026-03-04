@@ -21,15 +21,15 @@ public class ATC implements Runnable {
     private final LinkedList<Plane> landingQueue;
     private final LinkedList<Plane> takeoffQueue;
     
-    //mutex lock
+    //mutex lock for synchronize
     private final Object atcLock = new Object();
-    
     //thread control flag
     private volatile boolean running;
     
     //remember who ATC already say denied to
     private int lastDeniedId = -1;
     
+    //semaphore to limit the number of gates 
     private final Semaphore gateSlots = new Semaphore(3, true);
     
     //constructor
@@ -46,13 +46,17 @@ public class ATC implements Runnable {
                 Plane takeoffPlane = null;
                 
                 synchronized (atcLock) {
+                    //wait until there is a plne to process or system shutdown
                     while (landingQueue.isEmpty() && takeoffQueue.isEmpty() && running) {
                         atcLock.wait(); 
                     }
                     if (!running) break;
                     
+                    //landing queue
                     if (!landingQueue.isEmpty()) {
+                        //priority logic
                         for (Plane p : landingQueue) {
+                            //planes with fuel shortage has highest priority
                             if (p.hasFuelShortage()) {
                                 landingPlane = p;
                                 break;
@@ -62,7 +66,7 @@ public class ATC implements Runnable {
                             landingPlane = landingQueue.getFirst();
                         }
                     }
-                    
+                    //takeoff queue
                     if (!takeoffQueue.isEmpty()) {
                         takeoffPlane = takeoffQueue.getFirst();
                     }
@@ -70,20 +74,25 @@ public class ATC implements Runnable {
                 
                 boolean workDone = false;
                 
-                // 2. Process Landing (Check Capacity First!)
+                //process landing
                 if (landingPlane != null) {
+                    //check all constraints
+                    //airport capacity, gate capacity
                     if (!Main.airport.hasSpace() || gateSlots.availablePermits() == 0) {
                         if (landingPlane.getPlaneId() != lastDeniedId) {
                             System.out.println(Thread.currentThread().getName() + ": Landing Permission Denied for Plane-" + landingPlane.getPlaneId() + ". Airport/Gates Full.");
                             lastDeniedId = landingPlane.getPlaneId();
                         }
-                    } else if (!Main.runway.isAvailable()) {
+                    } 
+                    // runway status
+                    else if (!Main.runway.isAvailable()) {
                         if (landingPlane.getPlaneId() != lastDeniedId) {
                             System.out.println(Thread.currentThread().getName() + ": Landing Permission Denied for Plane-" + landingPlane.getPlaneId() + ". Runway Occupied.");
                             lastDeniedId = landingPlane.getPlaneId();
                         }
-                    } else {
-                        // Both are free! Try to grant.
+                    } 
+                    //if both free, grant permission
+                    else {
                         if (gateSlots.tryAcquire()) {
                             synchronized(atcLock) {
                                 landingQueue.remove(landingPlane);
@@ -97,11 +106,12 @@ public class ATC implements Runnable {
                                 synchronized(landingPlane) {
                                     landingPlane.setAssignedGate(gate);
                                     System.out.println(Thread.currentThread().getName() + ": Landing Permission Granted for Plane-" + landingPlane.getPlaneId());
-                                    landingPlane.notify(); 
+                                    landingPlane.notify(); //wake up plane thread
                                 }
                                 workDone = true;
                                 lastDeniedId = -1;
                             } else {
+                                //rollback if gate assignment fails
                                 gateSlots.release();
                                 Main.airport.planeLeft();
                             }
@@ -109,7 +119,7 @@ public class ATC implements Runnable {
                     }
                 }
                 
-                // 3. Process Takeoff
+                //process takeoff
                 if (!workDone && takeoffPlane != null && Main.runway.isAvailable()) {
                     synchronized(atcLock) {
                         takeoffQueue.remove(takeoffPlane);
@@ -122,7 +132,7 @@ public class ATC implements Runnable {
                     workDone = true;
                 }
                 
-                // 4. Idle Control
+                //Idle Control
                 if (!workDone) {
                     Thread.sleep(200); 
                 } else {
@@ -144,6 +154,7 @@ public class ATC implements Runnable {
         return null;
     } 
     
+    //Plane call this and block until the ATC notifies them
     public Gate requestLandingPermission(Plane plane) throws InterruptedException {
         synchronized (atcLock) {
             landingQueue.add(plane);
@@ -156,7 +167,6 @@ public class ATC implements Runnable {
             return plane.getAssignedGate();
         }
     }
-    
     public void requestTakeOffPermission(Plane plane) throws InterruptedException {
         synchronized (atcLock) {
             takeoffQueue.add(plane);
@@ -169,6 +179,10 @@ public class ATC implements Runnable {
         }
     }
     
+    public void releaseGateSlot() {
+        gateSlots.release(); 
+    }
+    
     public void shutdown() {
         running = false;
         synchronized(atcLock) {
@@ -177,15 +191,16 @@ public class ATC implements Runnable {
         System.out.println("Thread-ATC: Shutdown");
     }
     
+    //getter
     public int getWaitingQueueSize() {
         synchronized(atcLock) {
             return landingQueue.size();
         }
     }
-    
-    public boolean isRunning() { return running; }
-    
-    public void releaseGateSlot() {
-        gateSlots.release(); 
+    //condition check
+    public boolean isRunning(){ 
+        return running; 
     }
+    
+
 }

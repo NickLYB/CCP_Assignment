@@ -1,13 +1,10 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
- */
 package concurrent;
 
 import concurrent.Threads.*;
 import java.util.List;
 import java.util.Collections;
 import java.util.ArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  *
@@ -15,29 +12,29 @@ import java.util.ArrayList;
  */
 public class Statistic {
     private final List<Long> waitingTimes;
-    private int totalPlanesServed;
-    private int totalPassengersBoarded;
+    
+    // Using AtomicInteger for thread-safe incrementing without locks!
+    private final AtomicInteger totalPlanesServed;
+    private final AtomicInteger totalPassengersBoarded;
+    
     private final Object statsLock = new Object();
     
     public Statistic(){
         this.waitingTimes = new ArrayList<>();
-        this.totalPlanesServed = 0;
-        this.totalPassengersBoarded = 0;
+        this.totalPlanesServed = new AtomicInteger(0);
+        this.totalPassengersBoarded = new AtomicInteger(0);
     }
     
     public void recordPlane(Plane plane){
+        // Only lock the list, AtomicIntegers handle themselves safely
         synchronized(statsLock){
-            //waiting time
             long waitTime = plane.getWaitingTime();
             waitingTimes.add(waitTime);
-            
-            //passenger count
-            totalPlanesServed++;
-            totalPassengersBoarded += plane.getPassengerCount();
-            
         }
+        
+        totalPlanesServed.incrementAndGet();
+        totalPassengersBoarded.addAndGet(plane.getPassengerCount());
     }
-    
     
     public void printStatistic(){
         synchronized(statsLock){
@@ -58,11 +55,11 @@ public class Statistic {
             System.out.println("Avg:" + String.format("%.1f", avgWaitTime));
             
             System.out.println("Service Statistics:");
-            System.out.println("Total planes served: " + totalPlanesServed);
-            System.out.println("Total passengers boarded: " + totalPassengersBoarded);
+            System.out.println("Total planes served: " + totalPlanesServed.get());
+            System.out.println("Total passengers boarded: " + totalPassengersBoarded.get());
             
-            if (totalPlanesServed > 0) {
-                double avgPassengers = (double) totalPassengersBoarded / totalPlanesServed;
+            if (totalPlanesServed.get() > 0) {
+                double avgPassengers = (double) totalPassengersBoarded.get() / totalPlanesServed.get();
                 System.out.println("Average passengers per plane: " + String.format("%.1f", avgPassengers));
             }
         }
@@ -71,47 +68,22 @@ public class Statistic {
     public void reset() {
         synchronized (statsLock) {
             waitingTimes.clear();
-            totalPlanesServed = 0;
-            totalPassengersBoarded = 0;
-            System.out.println("Statistics: Reset to initial state.");
         }
+        totalPlanesServed.set(0);
+        totalPassengersBoarded.set(0);
+        System.out.println("Statistics: Reset to initial state.");
     }
     
-    public int getTotalPlanesServed() {
-        synchronized (statsLock) {
-            return totalPlanesServed;
-        }
-    }
-    
-    public int getTotalPassengersBoarded() {
-        synchronized (statsLock) {
-            return totalPassengersBoarded;
-        }
-    }
+    public int getTotalPlanesServed() { return totalPlanesServed.get(); }
+    public int getTotalPassengersBoarded() { return totalPassengersBoarded.get(); }
     
     public long getMaxWaitingTime() {
-        synchronized (statsLock) {
-            if (waitingTimes.isEmpty()) {
-                return 0;
-            }
-            return Collections.max(waitingTimes);
-        }
+        synchronized (statsLock) { return waitingTimes.isEmpty() ? 0 : Collections.max(waitingTimes); }
     }
     public long getMinWaitingTime() {
-        synchronized (statsLock) {
-            if (waitingTimes.isEmpty()) {
-                return 0;
-            }
-            return Collections.min(waitingTimes);
-        }
+        synchronized (statsLock) { return waitingTimes.isEmpty() ? 0 : Collections.min(waitingTimes); }
     }
-    
     public double getAverageWaitingTime() {
-        synchronized (statsLock) {
-            if (waitingTimes.isEmpty()) {
-                return 0.0;
-            }
-            return waitingTimes.stream().mapToLong(Long::longValue).average().orElse(0.0);
-        }
+        synchronized (statsLock) { return waitingTimes.isEmpty() ? 0.0 : waitingTimes.stream().mapToLong(Long::longValue).average().orElse(0.0); }
     }
 }

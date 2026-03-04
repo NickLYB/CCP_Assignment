@@ -5,7 +5,7 @@
 package concurrent.SharedResources;
 import concurrent.Threads.Plane;
 import java.util.concurrent.Semaphore;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.concurrent.locks.ReentrantLock;
 /**
  *
  * @author NICK
@@ -17,13 +17,15 @@ public class Gate {
     private boolean isReserved;
     private boolean isOccupied;
     
-    // Cleaning handshakes
+    //handshakes for cleaning operations
     private Plane planeToClean = null;
-    private final Semaphore cleanSignal = new Semaphore(0);
-    private final Semaphore cleanDoneSignal = new Semaphore(0);
+    private final Semaphore cleanSignal = new Semaphore(0);     //cleaner wait for plane
+    private final Semaphore cleanDoneSignal = new Semaphore(0); //plane wait for cleaner
     
-    private final ReentrantReadWriteLock rwLock = new ReentrantReadWriteLock(true);
+    //lock to ensures only one thread modifies gate status at a time
+    private final ReentrantLock lock = new ReentrantLock(true);
     
+    //constructor
     public Gate(){
         this.gateId = nextGateId++;
         this.isReserved = false;
@@ -32,71 +34,92 @@ public class Gate {
     }
     
     public void reserve(Plane plane){
-        rwLock.writeLock().lock();
+        lock.lock();
         try {
             this.currentPlane = plane;
             this.isReserved = true;
-        } finally { rwLock.writeLock().unlock(); }
+        } finally {
+            lock.unlock();
+        }
     }
-
-    public void dock(Plane plane) {
-        rwLock.writeLock().lock();
+    public void dock(Plane plane){
+        lock.lock();
         try {
             isOccupied = true;
             isReserved = false;
             currentPlane = plane;
-        } finally { rwLock.writeLock().unlock(); }
+        } finally {
+            lock.unlock();
+        }
     }
-
-    public void undock() {
-        rwLock.writeLock().lock(); 
+    public void undock(){
+        lock.lock(); 
         try {
             isOccupied = false;
             currentPlane = null;
         } finally { 
-            rwLock.writeLock().unlock(); 
+            lock.unlock(); 
         }
-        concurrent.Main.atc.releaseGateSlot(); // Tell ATC the slot is open!
+        concurrent.Main.atc.releaseGateSlot(); // Tell ATC the slot is open
     }
     
-    public void requestCleaning(Plane plane) {
-        this.planeToClean = plane;
-        cleanSignal.release(); // Wake up the cleaners
+    //cleaning work
+    public void requestCleaning(Plane plane){
+        lock.lock();
+        try {
+            this.planeToClean = plane;
+            cleanSignal.release(); //signal cleaner to start
+        } finally {
+            lock.unlock();
+        }
+    }
+    public void waitForCleaning() throws InterruptedException{
+        cleanDoneSignal.acquire(); //block plane until cleaned
+    }
+    public void awaitCleaning() throws InterruptedException{
+        cleanSignal.acquire(); //cleaner wait here for a plane
+    }
+    public void markCleaned(){
+        lock.lock();
+        try {
+            this.planeToClean = null;
+            cleanDoneSignal.release();
+        } finally {
+            lock.unlock();
+        }
     }
     
-    public void waitForCleaning() throws InterruptedException {
-        cleanDoneSignal.acquire(); // Plane waits for cleaners to finish
-    }
-
-    public void awaitCleaning() throws InterruptedException {
-        cleanSignal.acquire(); // Cleaners wait here for a plane
-    }
-
-    public void markCleaned() {
-        this.planeToClean = null;
-        cleanDoneSignal.release(); // Wake the plane back up
+    public Plane getPlaneToClean(){ 
+        lock.lock();
+        try {
+            return planeToClean;
+        } finally {
+            lock.unlock();
+        }
     }
     
-    public Plane getPlaneToClean() { return planeToClean; }
-    
-    public void releaseForShutdown() {
-        cleanSignal.release(); 
+    public void releaseForShutdown(){
+        cleanSignal.release(); //prevent cleaner from hanging on exit
     }
+   
+    //getter
+    public int getGateId(){ 
+        return gateId; 
+    }     
     
+    //condition checker
     public boolean isAvailable(){
-        rwLock.readLock().lock();
+        lock.lock();
         try {
             return !isOccupied && !isReserved;
-        } finally { rwLock.readLock().unlock(); }
+        } finally { lock.unlock(); }
     }
-
     public boolean isEmpty(){
-        rwLock.readLock().lock();
+        lock.lock();
         try {
             return !isOccupied && currentPlane == null;
-        } finally { rwLock.readLock().unlock(); }
-    }
+        } finally { lock.unlock(); }
+    } 
     
-    public int getGateId() { return gateId; }  
 }
  
